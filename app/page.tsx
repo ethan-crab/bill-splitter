@@ -181,6 +181,13 @@ export default function Home() {
 
     const headers = hasItems ? ["Person", "Item", "Amount"] : ["Person", "Amount"];
 
+    // Total row
+    const totalAmount = hasItems
+      ? items.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0)
+      : people.reduce((sum, p) => sum + (billAmount * p.percent) / 100, 0);
+    const totalLabel = "Total";
+    const totalAmountStr = `${currency.symbol}${totalAmount.toFixed(2)}`;
+
     // Measure and draw on canvas
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -194,6 +201,7 @@ export default function Home() {
     const rowHeight = fontSize + padding * 2;
     const headerHeight = headerFontSize + padding * 2;
     const font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+    const boldFont = `bold ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
     const headerFont = `bold ${headerFontSize}px ui-sans-serif, system-ui, sans-serif`;
 
     // Measure column widths
@@ -209,8 +217,15 @@ export default function Home() {
       });
     }
 
+    // Account for total row in column widths
+    ctx.font = boldFont;
+    const totalLabelW = ctx.measureText(totalLabel).width + padding * 2;
+    if (totalLabelW > colWidths[0]) colWidths[0] = totalLabelW;
+    const totalAmountW = ctx.measureText(totalAmountStr).width + padding * 2;
+    if (totalAmountW > colWidths[colWidths.length - 1]) colWidths[colWidths.length - 1] = totalAmountW;
+
     const tableWidth = colWidths.reduce((a, b) => a + b, 0);
-    const tableHeight = headerHeight + rowHeight * rows.length;
+    const tableHeight = headerHeight + rowHeight * (rows.length + 1);
     const canvasW = tableWidth + 2;
     const canvasH = tableHeight + 2;
 
@@ -262,6 +277,16 @@ export default function Home() {
         cx += colWidths[i];
       });
     }
+
+    // Total row
+    const totalY = 1 + headerHeight + rows.length * rowHeight;
+    ctx.fillStyle = "#f4f4f5";
+    ctx.fillRect(1, totalY, tableWidth, rowHeight);
+    ctx.font = boldFont;
+    ctx.fillStyle = "#18181b";
+    ctx.fillText(totalLabel, 1 + padding, totalY + padding + fontSize * 0.85);
+    const totalAmountX = 1 + tableWidth - padding - ctx.measureText(totalAmountStr).width;
+    ctx.fillText(totalAmountStr, totalAmountX, totalY + padding + fontSize * 0.85);
 
     // Outer border
     ctx.strokeStyle = "#d4d4d8";
