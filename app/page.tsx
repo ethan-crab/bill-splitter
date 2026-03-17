@@ -193,18 +193,18 @@ export default function Home() {
     const padding = 12;
     const rowHeight = fontSize + padding * 2;
     const headerHeight = headerFontSize + padding * 2;
-    const font = `${fontSize * scale}px ui-sans-serif, system-ui, sans-serif`;
-    const headerFont = `bold ${headerFontSize * scale}px ui-sans-serif, system-ui, sans-serif`;
+    const font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+    const headerFont = `bold ${headerFontSize}px ui-sans-serif, system-ui, sans-serif`;
 
     // Measure column widths
     ctx.font = headerFont;
-    const colWidths = headers.map((h) => ctx.measureText(h).width / scale + padding * 2);
+    const colWidths = headers.map((h) => ctx.measureText(h).width + padding * 2);
 
     ctx.font = font;
     for (const row of rows) {
       const cells = hasItems ? [row.person, row.item!, row.amount] : [row.person, row.amount];
       cells.forEach((cell, i) => {
-        const w = ctx.measureText(cell).width / scale + padding * 2;
+        const w = ctx.measureText(cell).width + padding * 2;
         if (w > colWidths[i]) colWidths[i] = w;
       });
     }
@@ -229,7 +229,7 @@ export default function Home() {
     ctx.font = headerFont;
     let x = 1;
     headers.forEach((h, i) => {
-      const textX = i === headers.length - 1 ? x + colWidths[i] - padding - ctx.measureText(h).width / scale : x + padding;
+      const textX = i === headers.length - 1 ? x + colWidths[i] - padding - ctx.measureText(h).width : x + padding;
       ctx.fillText(h, textX, 1 + padding + headerFontSize * 0.85);
       x += colWidths[i];
     });
@@ -257,7 +257,7 @@ export default function Home() {
       ctx.fillStyle = "#27272a";
       let cx = 1;
       cells.forEach((cell, i) => {
-        const textX = i === cells.length - 1 ? cx + colWidths[i] - padding - ctx.measureText(cell).width / scale : cx + padding;
+        const textX = i === cells.length - 1 ? cx + colWidths[i] - padding - ctx.measureText(cell).width : cx + padding;
         ctx.fillText(cell, textX, y + padding + fontSize * 0.85);
         cx += colWidths[i];
       });
