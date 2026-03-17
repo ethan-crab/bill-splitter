@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, DragEvent } from "react";
+import { useState, useCallback, useRef, DragEvent } from "react";
 
 interface Person {
   id: number;
@@ -141,12 +141,181 @@ export default function Home() {
 
   const unassignedItems = items.filter((item) => item.assignedTo === null);
 
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const exportAsImage = () => {
+    const hasItems = mode === "itemized" && items.length > 0;
+
+    // Build table rows: [person, item?, amount]
+    type Row = { person: string; item?: string; amount: string };
+    const rows: Row[] = [];
+
+    if (hasItems) {
+      for (const person of people) {
+        const personItems = getPersonItems(person.id);
+        if (personItems.length === 0) {
+          rows.push({
+            person: person.name,
+            item: "",
+            amount: `${currency.symbol}0.00`,
+          });
+        } else {
+          for (const item of personItems) {
+            rows.push({
+              person: person.name,
+              item: item.name || "Unnamed item",
+              amount: `${currency.symbol}${(parseFloat(item.price) || 0).toFixed(2)}`,
+            });
+          }
+        }
+      }
+    } else {
+      for (const person of people) {
+        const amount = (billAmount * person.percent) / 100;
+        rows.push({
+          person: person.name,
+          amount: `${currency.symbol}${amount.toFixed(2)}`,
+        });
+      }
+    }
+
+    const headers = hasItems ? ["Person", "Item", "Amount"] : ["Person", "Amount"];
+
+    // Measure and draw on canvas
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const scale = 2;
+    const fontSize = 14;
+    const headerFontSize = 14;
+    const padding = 12;
+    const rowHeight = fontSize + padding * 2;
+    const headerHeight = headerFontSize + padding * 2;
+    const font = `${fontSize * scale}px ui-sans-serif, system-ui, sans-serif`;
+    const headerFont = `bold ${headerFontSize * scale}px ui-sans-serif, system-ui, sans-serif`;
+
+    // Measure column widths
+    ctx.font = headerFont;
+    const colWidths = headers.map((h) => ctx.measureText(h).width / scale + padding * 2);
+
+    ctx.font = font;
+    for (const row of rows) {
+      const cells = hasItems ? [row.person, row.item!, row.amount] : [row.person, row.amount];
+      cells.forEach((cell, i) => {
+        const w = ctx.measureText(cell).width / scale + padding * 2;
+        if (w > colWidths[i]) colWidths[i] = w;
+      });
+    }
+
+    const tableWidth = colWidths.reduce((a, b) => a + b, 0);
+    const tableHeight = headerHeight + rowHeight * rows.length;
+    const canvasW = tableWidth + 2;
+    const canvasH = tableHeight + 2;
+
+    canvas.width = canvasW * scale;
+    canvas.height = canvasH * scale;
+    ctx.scale(scale, scale);
+
+    // Background
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    // Draw header
+    ctx.fillStyle = "#18181b";
+    ctx.fillRect(1, 1, tableWidth, headerHeight);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = headerFont;
+    let x = 1;
+    headers.forEach((h, i) => {
+      const textX = i === headers.length - 1 ? x + colWidths[i] - padding - ctx.measureText(h).width / scale : x + padding;
+      ctx.fillText(h, textX, 1 + padding + headerFontSize * 0.85);
+      x += colWidths[i];
+    });
+
+    // Draw rows
+    ctx.font = font;
+    for (let r = 0; r < rows.length; r++) {
+      const y = 1 + headerHeight + r * rowHeight;
+      const cells = hasItems
+        ? [rows[r].person, rows[r].item!, rows[r].amount]
+        : [rows[r].person, rows[r].amount];
+
+      // Alternating row background
+      ctx.fillStyle = r % 2 === 0 ? "#fafafa" : "#ffffff";
+      ctx.fillRect(1, y, tableWidth, rowHeight);
+
+      // Row border
+      ctx.strokeStyle = "#e4e4e7";
+      ctx.beginPath();
+      ctx.moveTo(1, y + rowHeight);
+      ctx.lineTo(1 + tableWidth, y + rowHeight);
+      ctx.stroke();
+
+      // Cell text
+      ctx.fillStyle = "#27272a";
+      let cx = 1;
+      cells.forEach((cell, i) => {
+        const textX = i === cells.length - 1 ? cx + colWidths[i] - padding - ctx.measureText(cell).width / scale : cx + padding;
+        ctx.fillText(cell, textX, y + padding + fontSize * 0.85);
+        cx += colWidths[i];
+      });
+    }
+
+    // Outer border
+    ctx.strokeStyle = "#d4d4d8";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(1, 1, tableWidth, tableHeight);
+
+    // Column dividers
+    ctx.strokeStyle = "#e4e4e7";
+    let dx = 1;
+    for (let i = 0; i < colWidths.length - 1; i++) {
+      dx += colWidths[i];
+      ctx.beginPath();
+      ctx.moveTo(dx, 1);
+      ctx.lineTo(dx, 1 + tableHeight);
+      ctx.stroke();
+    }
+
+    // Download
+    const link = document.createElement("a");
+    link.download = "bill-split.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  };
+
   return (
     <div className="flex min-h-screen items-start justify-center bg-zinc-50 px-4 py-12 font-sans dark:bg-zinc-950">
       <main className="w-full max-w-4xl">
-        <h1 className="mb-6 text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Bill Splitter
-        </h1>
+        <canvas ref={canvasRef} className="hidden" />
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            Bill Splitter
+          </h1>
+          <button
+            onClick={exportAsImage}
+            className="flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export Image
+          </button>
+        </div>
 
         {/* Top bar: Mode Toggle + Currency/Bill */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end">
