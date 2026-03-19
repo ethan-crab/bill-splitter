@@ -50,10 +50,21 @@ export default function Home() {
   const [items, setItems] = useState<BillItem[]>([]);
   const [draggedItemId, setDraggedItemId] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [discountEnabled, setDiscountEnabled] = useState(false);
+  const [discount, setDiscount] = useState("");
+  const [discountType, setDiscountType] = useState<"percent" | "fixed">("percent");
 
   const totalPercent = people.reduce((sum, p) => sum + p.percent, 0);
   const itemsTotal = items.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0);
   const billAmount = items.length > 0 ? itemsTotal : (parseFloat(bill) || 0);
+
+  const discountValue = parseFloat(discount) || 0;
+  const discountAmount = discountEnabled
+    ? discountType === "percent"
+      ? (billAmount * Math.min(discountValue, 100)) / 100
+      : Math.min(discountValue, billAmount)
+    : 0;
+  const effectiveBillAmount = Math.max(billAmount - discountAmount, 0);
 
   const splitEvenly = useCallback((list: Person[]): Person[] => {
     const even = createEvenSplit(list.length);
@@ -155,8 +166,14 @@ export default function Home() {
 
   // Per-person share calculation
   const getPersonShare = (person: Person): number => {
-    if (hasItems) return getPersonTotal(person.id);
-    return (billAmount * person.percent) / 100;
+    if (hasItems) {
+      const raw = getPersonTotal(person.id);
+      if (discountAmount > 0 && billAmount > 0) {
+        return raw * (effectiveBillAmount / billAmount);
+      }
+      return raw;
+    }
+    return (effectiveBillAmount * person.percent) / 100;
   };
 
   // Balances: positive = overpaid (owed money back), negative = still owes
@@ -240,7 +257,7 @@ export default function Home() {
     }
   } else {
     for (const person of people) {
-      const amount = (billAmount * person.percent) / 100;
+      const amount = (effectiveBillAmount * person.percent) / 100;
       const b = balances.find((x) => x.id === person.id)!;
       const paidStr = (parseFloat(person.paidAmount) || 0) > 0 ? `${currency.symbol}${(parseFloat(person.paidAmount) || 0).toFixed(2)}` : "";
       const balStr = b.balance > 0.005 ? `+${currency.symbol}${b.balance.toFixed(2)}` : b.balance < -0.005 ? `-${currency.symbol}${(-b.balance).toFixed(2)}` : "";
@@ -473,9 +490,18 @@ export default function Home() {
                   {currency.symbol}
                 </span>
                 {items.length > 0 ? (
-                  <span className="inline-flex w-44 items-center rounded-lg border border-zinc-200 bg-zinc-100 py-2.5 pl-7 pr-3 text-lg tabular-nums text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50">
-                    {itemsTotal.toFixed(2)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex w-44 cursor-not-allowed items-center justify-between rounded-lg border border-zinc-200 bg-zinc-100 py-2.5 pl-7 pr-3 text-lg tabular-nums text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
+                      {itemsTotal.toFixed(2)}
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-zinc-400 dark:text-zinc-500">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </span>
+                    <span className="whitespace-nowrap text-xs text-zinc-400 dark:text-zinc-500">
+                      From {items.length} item{items.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
                 ) : (
                   <input
                     id="bill"
@@ -491,6 +517,78 @@ export default function Home() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Discount */}
+        <div className="mb-6 flex items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={discountEnabled}
+              onChange={(e) => setDiscountEnabled(e.target.checked)}
+              className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:focus:ring-zinc-600"
+            />
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Discount</span>
+          </label>
+          {discountEnabled && (
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-md border border-zinc-300 dark:border-zinc-700">
+                <button
+                  onClick={() => setDiscountType("percent")}
+                  className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    discountType === "percent"
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      : "bg-white text-zinc-500 hover:text-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  } rounded-l-md`}
+                >
+                  %
+                </button>
+                <button
+                  onClick={() => setDiscountType("fixed")}
+                  className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    discountType === "fixed"
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      : "bg-white text-zinc-500 hover:text-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  } rounded-r-md`}
+                >
+                  {currency.symbol}
+                </button>
+              </div>
+              <div className="relative">
+                {discountType === "fixed" && (
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-400">
+                    {currency.symbol}
+                  </span>
+                )}
+                <input
+                  type="number"
+                  min="0"
+                  max={discountType === "percent" ? "100" : undefined}
+                  step={discountType === "percent" ? "1" : "0.01"}
+                  placeholder="0"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                  className={`w-28 rounded-lg border border-zinc-300 bg-white py-2 text-sm tabular-nums text-zinc-900 outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-500 dark:focus:ring-zinc-800 ${
+                    discountType === "fixed" ? "pl-6 pr-3" : "px-3"
+                  }`}
+                />
+                {discountType === "percent" && (
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-400">
+                    %
+                  </span>
+                )}
+              </div>
+              {discountAmount > 0 && (
+                <span className="text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+                  &minus;{currency.symbol}{discountAmount.toFixed(2)}
+                  {" = "}
+                  <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                    {currency.symbol}{effectiveBillAmount.toFixed(2)}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Two-column layout */}
@@ -525,7 +623,7 @@ export default function Home() {
                       </div>
                       <span className="w-24 text-right text-sm font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
                         {currency.symbol}
-                        {((billAmount * person.percent) / 100).toFixed(2)}
+                        {((effectiveBillAmount * person.percent) / 100).toFixed(2)}
                       </span>
                     </div>
                   ))}
@@ -732,7 +830,7 @@ export default function Home() {
                       {mode === "percentage" && (
                         <span className="text-sm font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
                           {currency.symbol}
-                          {((billAmount * person.percent) / 100).toFixed(2)}
+                          {((effectiveBillAmount * person.percent) / 100).toFixed(2)}
                         </span>
                       )}
 
